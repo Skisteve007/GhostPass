@@ -10,9 +10,10 @@ import ManagerDashboard from './ManagerDashboard';
 
 interface StaffDashboardRouterProps {
     user: any;
+    onBackToWallet?: () => void;
 }
 
-export const StaffDashboardRouter: React.FC<StaffDashboardRouterProps> = ({ user }) => {
+export const StaffDashboardRouter: React.FC<StaffDashboardRouterProps> = ({ user, onBackToWallet }) => {
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<'scan' | 'pos' | 'dashboard'>(
         user.role === 'DOOR' ? 'scan' : ['BAR', 'CONCESSION', 'MERCH'].includes(user.role) ? 'pos' : 'dashboard'
@@ -54,7 +55,13 @@ export const StaffDashboardRouter: React.FC<StaffDashboardRouterProps> = ({ user
                         <LanguageSwitcher showLabel={false} className="sm:hidden" />
                         <LanguageSwitcher showLabel={true} className="hidden sm:flex" />
                         <button
-                            onClick={() => { window.location.hash = '#/wallet'; }}
+                            onClick={() => {
+                                if (onBackToWallet) {
+                                    onBackToWallet();
+                                } else {
+                                    window.location.hash = '#/wallet';
+                                }
+                            }}
                             className="flex items-center space-x-2 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-600 transition-colors text-sm font-medium"
                         >
                             <Wallet className="w-4 h-4" />
@@ -83,11 +90,10 @@ export const StaffDashboardRouter: React.FC<StaffDashboardRouterProps> = ({ user
                                 <button
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
-                                    className={`flex items-center space-x-2 px-4 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-                                        activeTab === tab.id
-                                            ? `bg-${tab.color}-500/20 border border-${tab.color}-500/50 text-${tab.color}-400`
-                                            : 'bg-slate-800/50 text-slate-400 hover:text-white border border-transparent'
-                                    }`}
+                                    className={`flex items-center space-x-2 px-4 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${activeTab === tab.id
+                                        ? `bg-${tab.color}-500/20 border border-${tab.color}-500/50 text-${tab.color}-400`
+                                        : 'bg-slate-800/50 text-slate-400 hover:text-white border border-transparent'
+                                        }`}
                                 >
                                     <Icon className="w-4 h-4" />
                                     <span>{tab.label}</span>
@@ -106,7 +112,7 @@ export const StaffDashboardRouter: React.FC<StaffDashboardRouterProps> = ({ user
                 >
                     {activeTab === 'scan' && (
                         <div className="max-w-lg mx-auto">
-                            <GhostPassScanner />
+                            <GhostPassScanner initialVenueId={user.venue_id} />
                         </div>
                     )}
                     {activeTab === 'pos' && (

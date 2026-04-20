@@ -145,20 +145,18 @@ const AppContent: React.FC = () => {
         setActiveTab('session');
       } else if (newRoute === '#/trust') {
         setActiveTab('trust');
-      } else if (newRoute === '#/history') {
-        setActiveTab('history');
-      } else if (newRoute === '#/tickets') {
+      } else if (newRoute.startsWith('#/tickets')) {
         setActiveTab('tickets');
-      } else if (newRoute === '#/modes' && import.meta.env.DEV) {
+      } else if (newRoute.startsWith('#/modes') && import.meta.env.DEV) {
         // Only allow modes tester in development
         setActiveTab('modes');
-      } else if (newRoute === '#/entry-test' && import.meta.env.DEV) {
+      } else if (newRoute.startsWith('#/entry-test') && import.meta.env.DEV) {
         // Only allow entry tester in development
         setActiveTab('entry-test');
-      } else if (newRoute === '#/admin') {
+      } else if (newRoute.startsWith('#/admin')) {
         // Admin dashboard
         setActiveTab('admin');
-      } else if (newRoute === '#/modes' && !import.meta.env.DEV) {
+      } else if (newRoute.startsWith('#/modes') && !import.meta.env.DEV) {
         // Redirect to wallet if trying to access modes in production
         window.location.hash = '#/wallet';
       }
@@ -341,7 +339,13 @@ const AppContent: React.FC = () => {
   // Show Staff Portal
   if (showStaffPortal && userData) {
     return (
-      <StaffDashboardRouter user={userData} />
+      <StaffDashboardRouter
+        user={userData}
+        onBackToWallet={() => {
+          setShowStaffPortal(false);
+          window.location.hash = '#/wallet';
+        }}
+      />
     );
   }
 

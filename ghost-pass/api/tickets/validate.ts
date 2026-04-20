@@ -59,15 +59,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .single();
 
     if (ticketError || !ticket) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Ticket not found',
-        allowed: false 
+        allowed: false
       });
     }
 
     // Check ticket status
     if (ticket.status !== 'active') {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: `Ticket is ${ticket.status}`,
         allowed: false,
         ticket_status: ticket.status
@@ -76,15 +76,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Check if ticket is valid for this venue
     if (venue_id && ticket.events.venue_id !== venue_id) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Ticket not valid for this venue',
-        allowed: false 
+        allowed: false
       });
     }
 
     // Check if event is active
     if (ticket.events.status !== 'active') {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: `Event is ${ticket.events.status}`,
         allowed: false,
         event_status: ticket.events.status
@@ -97,15 +97,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const validUntil = new Date(ticket.valid_until);
 
     if (now < validFrom) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Ticket not yet valid',
         allowed: false,
-        valid_from: ticket.valid_from
+        valid_from: ticket.valid_from,
+        current_server_time: now.toISOString()
       });
     }
 
     if (now > validUntil) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Ticket has expired',
         allowed: false,
         valid_until: ticket.valid_until
@@ -114,7 +115,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Check if already used (for non-reentry tickets)
     if (ticket.entry_granted && !ticket.ticket_types.allows_reentry) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Ticket already used (no re-entry allowed)',
         allowed: false,
         entry_count: ticket.entry_count
@@ -123,7 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Grant entry
     const newEntryCount = ticket.entry_count + 1;
-    
+
     const { error: updateError } = await supabase
       .from('event_tickets')
       .update({
@@ -167,7 +168,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error) {
     console.error('Ticket validation error:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error',
       allowed: false

@@ -11,9 +11,17 @@ export interface ExtendedUser extends User {
 export const verifyToken = async (token: string) => {
   try {
     const { data, error } = await supabase.auth.getUser(token);
-    if (error || !data.user) return null;
+    if (error) {
+      console.error('verifyToken error:', error.message);
+      return null;
+    }
+    if (!data.user) {
+      console.error('verifyToken: No user returned');
+      return null;
+    }
     return data.user;
   } catch (error) {
+    console.error('verifyToken unexpected error:', error);
     return null;
   }
 };
@@ -21,21 +29,29 @@ export const verifyToken = async (token: string) => {
 export const getCurrentUser = async (req: VercelRequest): Promise<ExtendedUser | null> => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.warn('getCurrentUser: No Bearer token in Authorization header');
     return null;
   }
 
   const token = authHeader.substring(7);
   const user = await verifyToken(token);
-  
-  if (!user) return null;
+
+  if (!user) {
+    console.error('getCurrentUser: verifyToken returned null');
+    return null;
+  }
 
   // Get user role and venue/event info from database
   try {
-    const { data: userData } = await supabase
+    const { data: userData, error: dbError } = await supabase
       .from('users')
       .select('role, venue_id, event_id')
       .eq('id', user.id)
       .single();
+
+    if (dbError) {
+      console.warn('getCurrentUser: Error fetching user profile from public.users', dbError.message);
+    }
 
     return {
       ...user,
@@ -44,6 +60,7 @@ export const getCurrentUser = async (req: VercelRequest): Promise<ExtendedUser |
       event_id: userData?.event_id || null
     };
   } catch (error) {
+    console.error('getCurrentUser: Error in user sync catch block', error);
     return {
       ...user,
       role: 'USER',

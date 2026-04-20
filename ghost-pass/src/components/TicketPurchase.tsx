@@ -53,13 +53,28 @@ const TicketPurchase: React.FC = () => {
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
-  const [purchasedTicket, setPurchasedTicket] = useState<PurchasedTicket | null>(null);
+  const [purchasedTickets, setPurchasedTickets] = useState<PurchasedTicket[]>([]);
+  const [email, setEmail] = useState('');
   const [error, setError] = useState<string>('');
   const [balance, setBalance] = useState(0);
 
   useEffect(() => {
-    fetchEvents();
-    fetchBalance();
+    const init = async () => {
+      const fetchedEvents = await fetchEvents();
+      fetchBalance();
+
+      // Check for event ID in URL hash
+      const hash = window.location.hash;
+      const eventIdMatch = hash.match(/[?&]event=([^&]*)/);
+      if (eventIdMatch && eventIdMatch[1] && fetchedEvents) {
+        const urlEventId = eventIdMatch[1];
+        const event = fetchedEvents.find((e: Event) => e.id === urlEventId);
+        if (event) {
+          handleEventSelect(event);
+        }
+      }
+    };
+    init();
   }, []);
 
   const fetchEvents = async () => {
@@ -73,13 +88,16 @@ const TicketPurchase: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setEvents(data.events || []);
+        const eventsList = data.events || [];
+        setEvents(eventsList);
+        return eventsList;
       }
     } catch (error) {
       console.error(t('tickets.failedToFetchEvents'), error);
     } finally {
       setLoading(false);
     }
+    return [];
   };
 
   const fetchBalance = async () => {
@@ -118,7 +136,7 @@ const TicketPurchase: React.FC = () => {
     setSelectedEvent(event);
     setSelectedTicketType(null);
     setQuantity(1);
-    setPurchasedTicket(null);
+    setPurchasedTickets([]);
     setError('');
     fetchTicketTypes(event.id);
   };
@@ -146,6 +164,7 @@ const TicketPurchase: React.FC = () => {
           quantity: quantity,
           wallet_binding_id: walletBindingId,
           device_fingerprint: deviceFingerprint,
+          email: email,
         }),
       });
 
@@ -156,14 +175,14 @@ const TicketPurchase: React.FC = () => {
 
       const data = await response.json();
 
-      setPurchasedTicket({
-        id: data.ticket.id,
-        ticket_code: data.ticket.ticket_code,
+      setPurchasedTickets(data.tickets.map((t: any) => ({
+        id: t.id,
+        ticket_code: t.ticket_code,
         event_name: selectedEvent.name,
         ticket_type_name: selectedTicketType.name,
-        total_paid_cents: data.receipt.pricing.total_paid_cents,
+        total_paid_cents: data.receipt.pricing.total_paid_cents / quantity,
         purchased_at: data.ticket.purchased_at,
-      });
+      })));
 
       // Refresh balance
       await fetchBalance();
@@ -196,7 +215,7 @@ const TicketPurchase: React.FC = () => {
     );
   }
 
-  if (purchasedTicket) {
+  if (purchasedTickets.length > 0) {
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -207,50 +226,51 @@ const TicketPurchase: React.FC = () => {
           <div className="w-16 h-16 mx-auto mb-4 bg-green-500/20 rounded-full flex items-center justify-center">
             <CheckCircle className="w-8 h-8 text-green-400" />
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">{t('tickets.ticketPurchased')}</h2>
+          <h2 className="text-2xl font-bold text-white mb-2">{purchasedTickets.length > 1 ? t('tickets.ticketsPurchased') : t('tickets.ticketPurchased')}</h2>
           <p className="text-slate-400">{t('tickets.ticketReady')}</p>
         </div>
 
-        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-slate-400">{t('tickets.event')}</span>
-            <span className="text-white font-medium">{purchasedTicket.event_name}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-400">{t('tickets.ticketType')}</span>
-            <span className="text-white font-medium">{purchasedTicket.ticket_type_name}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-400">{t('tickets.totalPaid')}</span>
-            <span className="text-green-400 font-bold text-lg">
-              ${(purchasedTicket.total_paid_cents / 100).toFixed(2)}
-            </span>
-          </div>
+        <div className="space-y-4">
+          {purchasedTickets.map((ticket, index) => (
+            <div key={ticket.id} className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 space-y-4">
+              {purchasedTickets.length > 1 && (
+                <div className="text-center font-semibold text-cyan-400 mb-2">
+                  Ticket {index + 1} of {purchasedTickets.length}
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">{t('tickets.event')}</span>
+                <span className="text-white font-medium">{ticket.event_name}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">{t('tickets.ticketType')}</span>
+                <span className="text-white font-medium">{ticket.ticket_type_name}</span>
+              </div>
 
-          <div className="pt-4 border-t border-slate-700">
-            <div className="bg-white p-4 rounded-lg flex flex-col items-center">
-              <QRCode
-                value={purchasedTicket.ticket_code}
-                size={180}
-                fgColor="#0f172a"
-                bgColor="#ffffff"
-                level="M"
-                style={{ height: 'auto', maxWidth: '100%', width: '100%' }}
-              />
-              <p className="text-xs text-slate-600 font-mono mt-2">{purchasedTicket.ticket_code}</p>
+              <div className="pt-4 border-t border-slate-700">
+                <div className="bg-white p-4 rounded-lg flex flex-col items-center">
+                  <QRCode
+                    value={`ticket:${ticket.ticket_code}`}
+                    size={180}
+                    fgColor="#0f172a"
+                    bgColor="#ffffff"
+                    level="M"
+                    style={{ height: 'auto', maxWidth: '100%', width: '100%' }}
+                  />
+                  <p className="text-xs text-slate-600 font-mono mt-2">ticket:{ticket.ticket_code}</p>
+                </div>
+              </div>
             </div>
-            <p className="text-xs text-slate-400 text-center mt-2">
-              {t('tickets.showQRCode')}
-            </p>
-          </div>
+          ))}
         </div>
 
         <button
           onClick={() => {
-            setPurchasedTicket(null);
+            setPurchasedTickets([]);
             setSelectedEvent(null);
             setSelectedTicketType(null);
             setQuantity(1);
+            setEmail('');
           }}
           className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
         >
@@ -259,6 +279,7 @@ const TicketPurchase: React.FC = () => {
       </motion.div>
     );
   }
+
 
   return (
     <div className="space-y-6">
@@ -415,7 +436,7 @@ const TicketPurchase: React.FC = () => {
                 <span className="text-slate-400">{t('tickets.ticketType')}</span>
                 <span className="text-white">{selectedTicketType.name}</span>
               </div>
-              
+
               {/* Quantity Selector */}
               <div className="flex justify-between items-center py-2">
                 <span className="text-slate-400">{t('tickets.quantity')}</span>
@@ -456,12 +477,24 @@ const TicketPurchase: React.FC = () => {
               </div>
             </div>
 
+            <div className="pt-2">
+              <label className="block text-sm text-slate-400 mb-1">{t('tickets.emailForReceipt', 'Email for tickets & receipt (required)')}</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                required
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+              />
+            </div>
+
             <button
               onClick={handlePurchase}
-              disabled={purchasing || balance < calculateTotal(selectedTicketType, selectedEvent.service_fee_percent, quantity)}
+              disabled={purchasing || balance < calculateTotal(selectedTicketType, selectedEvent.service_fee_percent, quantity) || !email || !email.includes('@')}
               className={cn(
                 "w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center space-x-2",
-                purchasing || balance < calculateTotal(selectedTicketType, selectedEvent.service_fee_percent, quantity)
+                purchasing || balance < calculateTotal(selectedTicketType, selectedEvent.service_fee_percent, quantity) || !email || !email.includes('@')
                   ? "bg-slate-700 text-slate-400 cursor-not-allowed"
                   : "bg-cyan-600 hover:bg-cyan-700 text-white"
               )}

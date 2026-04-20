@@ -19,6 +19,7 @@ interface CartItem extends MenuItem {
 interface MenuBasedVendorPurchaseProps {
   venueId?: string;
   eventId?: string;
+  clientWalletId?: string;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -33,6 +34,7 @@ const TIP_PRESETS = [
 export const MenuBasedVendorPurchase: React.FC<MenuBasedVendorPurchaseProps> = ({
   venueId,
   eventId,
+  clientWalletId,
   onClose,
   onSuccess,
 }) => {
@@ -69,15 +71,20 @@ export const MenuBasedVendorPurchase: React.FC<MenuBasedVendorPurchaseProps> = (
       const deviceFingerprint = localStorage.getItem('device_fingerprint');
       if (!deviceFingerprint) return;
 
-      const response = await fetch('/api/wallet/balance', {
-        headers: {
-          'X-Device-Fingerprint': deviceFingerprint,
-        },
-      });
+      if (!clientWalletId) {
+        const url = new URL('/api/wallet/balance', window.location.origin);
+        if (clientWalletId) url.searchParams.append('client_wallet_id', clientWalletId);
 
-      if (response.ok) {
-        const data = await response.json();
-        setWalletBalance(data.balance_cents || 0);
+        const response = await fetch(url, {
+          headers: {
+            'X-Device-Fingerprint': deviceFingerprint,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setWalletBalance(data.balance_cents || 0);
+        }
       }
     } catch (error) {
       console.error('Failed to check balance:', error);
@@ -116,7 +123,7 @@ export const MenuBasedVendorPurchase: React.FC<MenuBasedVendorPurchaseProps> = (
   const addToCart = (item: MenuItem) => {
     const existingItem = cart.find(i => i.id === item.id);
     if (existingItem) {
-      setCart(cart.map(i => 
+      setCart(cart.map(i =>
         i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
       ));
     } else {
@@ -127,7 +134,7 @@ export const MenuBasedVendorPurchase: React.FC<MenuBasedVendorPurchaseProps> = (
   const removeFromCart = (itemId: string) => {
     const existingItem = cart.find(i => i.id === itemId);
     if (existingItem && existingItem.quantity > 1) {
-      setCart(cart.map(i => 
+      setCart(cart.map(i =>
         i.id === itemId ? { ...i, quantity: i.quantity - 1 } : i
       ));
     } else {
@@ -157,10 +164,10 @@ export const MenuBasedVendorPurchase: React.FC<MenuBasedVendorPurchaseProps> = (
 
   const handleAddFunds = async () => {
     try {
-      const walletBindingId = localStorage.getItem('wallet_binding_id');
+      const activeWalletId = clientWalletId || localStorage.getItem('wallet_binding_id');
       const deviceFingerprint = localStorage.getItem('device_fingerprint');
 
-      if (!walletBindingId || !deviceFingerprint) {
+      if (!activeWalletId || !deviceFingerprint) {
         showToast(t('menu.errors.walletNotFound'), 'error');
         return;
       }
@@ -174,7 +181,7 @@ export const MenuBasedVendorPurchase: React.FC<MenuBasedVendorPurchaseProps> = (
         },
         body: JSON.stringify({
           amount: Math.max(shortfall, 500), // Minimum $5.00
-          wallet_binding_id: walletBindingId,
+          wallet_binding_id: activeWalletId,
           device_fingerprint: deviceFingerprint,
           success_url: `${window.location.origin}/#/wallet?payment=success`,
           cancel_url: `${window.location.origin}/#/wallet?payment=cancelled`,
@@ -188,7 +195,7 @@ export const MenuBasedVendorPurchase: React.FC<MenuBasedVendorPurchaseProps> = (
       }
 
       const data = await response.json();
-      
+
       if (data.url) {
         // Redirect to Stripe Checkout
         window.location.href = data.url;
@@ -209,10 +216,10 @@ export const MenuBasedVendorPurchase: React.FC<MenuBasedVendorPurchaseProps> = (
 
     setIsProcessing(true);
     try {
-      const walletBindingId = localStorage.getItem('wallet_binding_id');
+      const activeWalletId = clientWalletId || localStorage.getItem('wallet_binding_id');
       const deviceFingerprint = localStorage.getItem('device_fingerprint');
 
-      if (!walletBindingId || !deviceFingerprint) {
+      if (!activeWalletId || !deviceFingerprint) {
         showToast(t('menu.errors.walletNotFound'), 'error');
         setIsProcessing(false);
         return;
@@ -226,7 +233,7 @@ export const MenuBasedVendorPurchase: React.FC<MenuBasedVendorPurchaseProps> = (
           'X-Device-Fingerprint': deviceFingerprint,
         },
         body: JSON.stringify({
-          wallet_binding_id: walletBindingId,
+          wallet_binding_id: activeWalletId,
           item_id: 'multi_item_purchase',
           gateway_id: 'pos_terminal_01',
           quantity: 1,
@@ -395,17 +402,16 @@ export const MenuBasedVendorPurchase: React.FC<MenuBasedVendorPurchaseProps> = (
                 <label className="block text-sm font-medium text-slate-300 mb-3">
                   {t('menu.addTip')}
                 </label>
-                
+
                 <div className="grid grid-cols-4 gap-2 mb-3">
                   {TIP_PRESETS.map((preset) => (
                     <button
                       key={preset.value}
                       onClick={() => handleTipSelect(preset.value)}
-                      className={`py-2 px-2 rounded-lg border-2 transition-all ${
-                        !isCustom && selectedTipPercent === preset.value
+                      className={`py-2 px-2 rounded-lg border-2 transition-all ${!isCustom && selectedTipPercent === preset.value
                           ? 'border-cyan-500 bg-cyan-500/20 text-cyan-400'
                           : 'border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-600'
-                      }`}
+                        }`}
                     >
                       {preset.label}
                     </button>
@@ -420,11 +426,10 @@ export const MenuBasedVendorPurchase: React.FC<MenuBasedVendorPurchaseProps> = (
                     onChange={(e) => handleCustomTip(e.target.value)}
                     onFocus={() => setIsCustom(true)}
                     placeholder={t('menu.customTip')}
-                    className={`w-full px-4 py-2 bg-slate-800/50 border-2 rounded-lg text-white placeholder-slate-500 focus:outline-none transition-all ${
-                      isCustom
+                    className={`w-full px-4 py-2 bg-slate-800/50 border-2 rounded-lg text-white placeholder-slate-500 focus:outline-none transition-all ${isCustom
                         ? 'border-cyan-500 bg-cyan-500/10'
                         : 'border-slate-700'
-                    }`}
+                      }`}
                   />
                   <Percent className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 </div>

@@ -16,6 +16,7 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { adminSupabase as supabase } from '../_lib/supabase.js';
 import { handleCors } from '../_lib/cors.js';
 import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Handle CORS
@@ -38,8 +39,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Validation
     if (!event_id || !ticket_type_id || !wallet_binding_id) {
-      return res.status(400).json({ 
-        error: 'Missing required fields: event_id, ticket_type_id, wallet_binding_id' 
+      return res.status(400).json({
+        error: 'Missing required fields: event_id, ticket_type_id, wallet_binding_id'
       });
     }
 
@@ -92,7 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Check if wallet has sufficient balance
     if (wallet.balance_cents < totalCostCents) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Insufficient balance',
         required_cents: totalCostCents,
         current_balance_cents: wallet.balance_cents,
@@ -155,7 +156,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('wallets')
         .update({ balance_cents: wallet.balance_cents })
         .eq('wallet_binding_id', wallet_binding_id);
-      
+
       return res.status(500).json({ error: 'Failed to create tickets' });
     }
 
@@ -193,9 +194,74 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const firstTicket = tickets[0];
 
+    // Send confirmation email
+    try {
+      let userEmail = req.body.email;
+      if (!userEmail && wallet.user_id) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('email')
+          .eq('id', wallet.user_id)
+          .single();
+        if (userData?.email) {
+          userEmail = userData.email;
+        }
+      }
+
+      if (userEmail) {
+        const transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user: process.env.SMTP_USER || 'test@gmail.com',
+            pass: process.env.SMTP_PASS || 'pass',
+          },
+        });
+
+        const qrImagesHtml = tickets.map((t: any, index: number) => `
+          <div style="text-align: center; margin: 20px 0;">
+            ${qty > 1 ? `<p><strong>Ticket ${index + 1} of ${qty}</strong></p>` : ''}
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=ticket:${t.ticket_code}" alt="Ticket QR Code" style="border: 2px solid #ccc; padding: 10px; border-radius: 10px;" />
+            <p style="text-align: center; font-family: monospace; font-size: 1.2em; background: #eee; padding: 10px;">ticket:${t.ticket_code}</p>
+          </div>
+        `).join('\\n');
+
+        const mailOptions = {
+          from: process.env.SMTP_USER || 'no-reply@ghostpass.com',
+          to: userEmail,
+          subject: `Your Tickets for ${event.name}`,
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #111;">
+              <h1 style="color: #333;">Ticket Confirmation</h1>
+              <p>Thank you for your purchase!</p>
+              <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p><strong>Event:</strong> ${event.name}</p>
+                <p><strong>Ticket Type:</strong> ${ticketType.name}</p>
+                <p><strong>Quantity:</strong> ${qty}</p>
+                <p><strong>Total Paid:</strong> $${(totalCostCents / 100).toFixed(2)}</p>
+              </div>
+              <h2 style="color: #333; text-align: center;">${qty > 1 ? 'Your Ticket QRs' : 'Your Ticket QR'}</h2>
+              <p style="text-align: center;">Show ${qty > 1 ? 'these codes' : 'this code'} at the door for entry:</p>
+              ${qrImagesHtml}
+              <p style="text-align: center; color: #888;">If you purchased multiple tickets, you can view them all in your wallet app.</p>
+            </div>
+          `,
+        };
+
+        if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+          await transporter.sendMail(mailOptions);
+        } else {
+          console.log('Skipping email dispatch (no SMTP credentials), simulated HTML sent to:', userEmail);
+        }
+      }
+    } catch (emailError) {
+      console.error('Failed to send confirmation email:', emailError);
+      // We don't fail the purchase if the email fails
+    }
+
     // Generate receipt
     const receipt = {
-      receipt_id: `receipt_${Date.now()}`,
+      receipt_id: `receipt_${Date.now()
+        } `,
       ticket_ids: tickets.map((t: any) => t.id),
       ticket_code: firstTicket.ticket_code,
       quantity: qty,
@@ -249,7 +315,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error) {
     console.error('Ticket purchase error:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
     });

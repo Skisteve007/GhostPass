@@ -478,6 +478,11 @@ export const QRCodeGenerator: React.FC<QRCodeGeneratorProps> = ({ venueId, event
                 {t('qr.scannerReady')}
               </p>
             </div>
+            <div className="mt-3">
+              <code className="text-xs text-blue-400 bg-slate-900 px-2 py-1 rounded">
+                {selectedAsset.asset_code}
+              </code>
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row justify-center gap-3">

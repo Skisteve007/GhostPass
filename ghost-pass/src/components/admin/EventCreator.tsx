@@ -90,19 +90,24 @@ export const EventCreator: React.FC = () => {
     try {
       // Get venue name from selected venue
       const selectedVenue = venues.find(v => v.venue_id === formData.venue_id);
-      
-      await eventApi.create({
+
+      // Convert local datetime-local strings to proper ISO strings
+      const payload = {
         ...formData,
-        venue_name: selectedVenue?.venue_name || formData.venue_id
-      });
+        venue_name: selectedVenue?.venue_name || formData.venue_id,
+        start_date: formData.start_date ? new Date(formData.start_date).toISOString() : '',
+        end_date: formData.end_date ? new Date(formData.end_date).toISOString() : '',
+      };
+
+      await eventApi.create(payload);
       alert(t('events.eventCreated'));
-      
+
       // Keep dates but reset other fields
       const preservedDates = {
         start_date: formData.start_date,
         end_date: formData.end_date,
       };
-      
+
       setFormData({
         event_id: '',
         venue_id: '',
@@ -142,7 +147,7 @@ export const EventCreator: React.FC = () => {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold text-white mb-4">{t('events.createEvent')}</h2>
-      
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-slate-300 mb-1">{t('events.eventId')}</label>
@@ -373,11 +378,10 @@ export const EventCreator: React.FC = () => {
           </div>
           <div className="mt-3 p-2 bg-slate-900/50 rounded">
             <p className="text-xs text-slate-400">
-              Total Split: <span className={`font-semibold ${
-                (formData.valid_percentage + formData.vendor_percentage + formData.pool_percentage + formData.promoter_percentage + formData.executive_percentage) === 100 
-                  ? 'text-emerald-400' 
+              Total Split: <span className={`font-semibold ${(formData.valid_percentage + formData.vendor_percentage + formData.pool_percentage + formData.promoter_percentage + formData.executive_percentage) === 100
+                  ? 'text-emerald-400'
                   : 'text-red-400'
-              }`}>
+                }`}>
                 {(formData.valid_percentage + formData.vendor_percentage + formData.pool_percentage + formData.promoter_percentage + formData.executive_percentage).toFixed(2)}%
               </span>
               {(formData.valid_percentage + formData.vendor_percentage + formData.pool_percentage + formData.promoter_percentage + formData.executive_percentage) !== 100 && (

@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { Calendar, Plus, Edit2, Trash2, Loader2, AlertCircle } from 'lucide-react';
+import { Calendar, Plus, Edit2, Trash2, Loader2, AlertCircle, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { eventApi, revenueProfileApi } from '@/lib/api-client';
 import { useToast } from '../ui/toast';
+import QRCodeLib from 'react-qr-code';
+
+const QRCode = (QRCodeLib as any).default || QRCodeLib;
 
 interface VenueEventManagerProps {
   venueId: string;
@@ -110,6 +113,33 @@ export const VenueEventManager: React.FC<VenueEventManagerProps> = ({ venueId })
     }
   };
 
+  const downloadQRCode = (eventId: string, eventName: string) => {
+    const svg = document.getElementById(`qr-event-${eventId}`);
+    if (svg) {
+      const svgData = new XMLSerializer().serializeToString(svg);
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      const img = new Image();
+      img.onload = () => {
+        // High resolution for clear QR scanning
+        canvas.width = 1000;
+        canvas.height = 1000;
+        if (ctx) {
+          ctx.fillStyle = "white";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 50, 50, 900, 900);
+
+          const pngFile = canvas.toDataURL("image/png");
+          const downloadLink = document.createElement("a");
+          downloadLink.download = `qr-${eventName.replace(/\s+/g, '-').toLowerCase()}.png`;
+          downloadLink.href = pngFile;
+          downloadLink.click();
+        }
+      };
+      img.src = "data:image/svg+xml;base64," + btoa(svgData);
+    }
+  };
+
   const handleRevenueProfileChange = (profileId: string) => {
     setSelectedRevenueProfileId(profileId);
     if (profileId) {
@@ -166,7 +196,9 @@ export const VenueEventManager: React.FC<VenueEventManagerProps> = ({ venueId })
       // Use venueId as venue_name if venue_name is not set
       const submitData = {
         ...formData,
-        venue_name: formData.venue_name || venueId
+        venue_name: formData.venue_name || venueId,
+        start_date: formData.start_date ? new Date(formData.start_date).toISOString() : '',
+        end_date: formData.end_date ? new Date(formData.end_date).toISOString() : '',
       };
 
       if (editingEvent) {
@@ -663,6 +695,33 @@ export const VenueEventManager: React.FC<VenueEventManagerProps> = ({ venueId })
                     {event.ticket_price_cents > 0 && (
                       <span className="text-purple-400">{t('events.ticket')} ${(event.ticket_price_cents / 100).toFixed(2)}</span>
                     )}
+                  </div>
+                  <div className="mt-4 p-4 bg-slate-800 rounded-xl flex items-start space-x-4">
+                    <div className="bg-white p-2 rounded-lg">
+                      <QRCode
+                        id={`qr-event-${event.event_id}`}
+                        value={`${window.location.origin}/e/${event.event_id}/default`}
+                        size={100}
+                        fgColor="#0f172a"
+                        bgColor="#ffffff"
+                        level="M"
+                      />
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-semibold text-white mb-1">Event QR</h4>
+                      <p className="text-xs text-slate-400 mb-2">Guests can scan this QR with their camera app to instantly open the purchase page for this event.</p>
+                      <div className="flex items-center space-x-2">
+                        <code className="text-xs text-cyan-400 bg-slate-900 px-2 py-1 rounded">event:{event.event_id}</code>
+                        <button
+                          onClick={() => downloadQRCode(event.event_id, event.event_name)}
+                          className="flex items-center space-x-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white text-[10px] uppercase font-bold rounded transition-colors"
+                        >
+                          <Download size={10} />
+                          <span>Download</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div className="flex space-x-2 ml-4">

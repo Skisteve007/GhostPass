@@ -13,10 +13,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { 
-  AlertTriangle, 
-  CheckCircle, 
-  X, 
+import {
+  AlertTriangle,
+  CheckCircle,
+  X,
   Sun,
   Shield,
   Zap,
@@ -27,6 +27,7 @@ import {
 import { cn } from '@/lib/utils';
 import GhostPassAutoSurface from './GhostPassAutoSurface';
 import { FootprintVerification } from './FootprintVerification';
+import { MenuBasedVendorPurchase } from './MenuBasedVendorPurchase';
 
 // HTML5 QR Code scanner
 import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode';
@@ -62,24 +63,31 @@ interface EntryPermission {
   reason?: string;
 }
 
-const GhostPassScanner: React.FC = () => {
+interface GhostPassScannerProps {
+  initialVenueId?: string;
+  initialGatewayId?: string;
+}
+
+const GhostPassScanner: React.FC<GhostPassScannerProps> = ({ initialVenueId, initialGatewayId }) => {
   const { t } = useTranslation();
   const [scanState, setScanState] = useState<'idle' | 'scanning' | 'processing' | 'success' | 'error' | 'verification_required'>('idle');
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [entryPermission, setEntryPermission] = useState<EntryPermission | null>(null);
   const [showAutoSurface, setShowAutoSurface] = useState(false);
+  const [showPos, setShowPos] = useState(false);
   const [brightnessControlled, setBrightnessControlled] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [walletBindingId, setWalletBindingId] = useState('');
   const [eventName, setEventName] = useState<string | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
-  const [venueId, setVenueId] = useState<string>('venue_001');
+  const [venueId, setVenueId] = useState<string>(initialVenueId || 'venue_001');
+  const [gatewayId] = useState<string>(initialGatewayId || 'scanner_default');
   const [deviceFingerprint, setDeviceFingerprint] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [currentVerificationTier, setCurrentVerificationTier] = useState(1);
   const processingRef = React.useRef(false);
-  
+
   const scannerElementId = 'qr-scanner-container';
 
   // Generate device fingerprint on mount
@@ -91,7 +99,7 @@ const GhostPassScanner: React.FC = () => {
       const fingerprint = canvas.toDataURL();
       return btoa(fingerprint).slice(0, 32);
     };
-    
+
     setDeviceFingerprint(generateFingerprint());
   }, []);
 
@@ -100,7 +108,7 @@ const GhostPassScanner: React.FC = () => {
     const getWalletInfo = async () => {
       try {
         const deviceFingerprint = localStorage.getItem('device_fingerprint');
-        
+
         if (!deviceFingerprint) {
           // Generate device fingerprint if not exists
           const canvas = document.createElement('canvas');
@@ -110,14 +118,14 @@ const GhostPassScanner: React.FC = () => {
           const fp = btoa(fingerprint).slice(0, 32);
           localStorage.setItem('device_fingerprint', fp);
         }
-        
+
         // Check if wallet already exists in localStorage (from previous scan)
         const existingWalletId = localStorage.getItem('wallet_binding_id');
         if (existingWalletId) {
           setWalletBindingId(existingWalletId);
           return;
         }
-        
+
         // Don't create wallet automatically - wait for first scan
         // Just set empty wallet ID for now
         setWalletBindingId('');
@@ -126,7 +134,7 @@ const GhostPassScanner: React.FC = () => {
         setWalletBindingId('');
       }
     };
-    
+
     getWalletInfo();
   }, []);
 
@@ -152,7 +160,7 @@ const GhostPassScanner: React.FC = () => {
           restoreBrightness();
         }
       };
-      
+
       cleanup();
     };
   }, []);
@@ -162,13 +170,13 @@ const GhostPassScanner: React.FC = () => {
       setScanState('scanning');
       setIsScanning(true);
       setErrorMessage('');
-      
+
       // Check for camera permissions first
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         try {
           // Request camera permission explicitly
-          const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: "environment" } 
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" }
           });
           // Stop the test stream immediately
           stream.getTracks().forEach(track => track.stop());
@@ -180,20 +188,20 @@ const GhostPassScanner: React.FC = () => {
           return;
         }
       }
-      
+
       // Apply brightness control for scanning
       await applyBrightnessControl();
-      
+
       // Initialize scanner only when needed
       if (!scannerRef.current) {
         scannerRef.current = new Html5Qrcode(scannerElementId);
       }
-      
+
       // Check if scanner is already running
       if (scannerRef.current.getState() === Html5QrcodeScannerState.SCANNING) {
         await scannerRef.current.stop();
       }
-      
+
       // Start scanning with back camera
       await scannerRef.current.start(
         { facingMode: "environment" }, // Use back camera
@@ -219,11 +227,11 @@ const GhostPassScanner: React.FC = () => {
           }
         }
       );
-      
+
     } catch (error) {
       console.error('Camera access failed:', error);
       let errorMsg = t('scanner.cameraAccessFailed');
-      
+
       if (error instanceof Error) {
         if (error.name === 'NotAllowedError') {
           errorMsg += ' ' + t('scanner.allowCameraPermissions');
@@ -237,7 +245,7 @@ const GhostPassScanner: React.FC = () => {
       } else {
         errorMsg += ' ' + t('scanner.checkCameraPermissions');
       }
-      
+
       setErrorMessage(errorMsg);
       setScanState('error');
       setIsScanning(false);
@@ -248,7 +256,7 @@ const GhostPassScanner: React.FC = () => {
   const stopCamera = async () => {
     try {
       setIsScanning(false);
-      
+
       // Stop the scanner if it's running
       if (scannerRef.current) {
         const currentState = scannerRef.current.getState();
@@ -256,10 +264,10 @@ const GhostPassScanner: React.FC = () => {
           await scannerRef.current.stop();
         }
       }
-      
+
       // Restore brightness and cleanup
       restoreBrightness();
-      
+
     } catch (error) {
       console.error('Failed to stop camera:', error);
       // Force cleanup even if stop fails
@@ -340,7 +348,7 @@ const GhostPassScanner: React.FC = () => {
           // Response is not JSON, treat as error
           const errorData = await response.text();
           console.error('Entry permission check returned non-JSON:', errorData);
-          
+
           const fallbackPermission = {
             allowed: false,
             entry_type: 'initial' as const,
@@ -354,7 +362,7 @@ const GhostPassScanner: React.FC = () => {
       } else {
         const errorData = await response.text();
         console.error('Entry permission check failed:', response.status, errorData);
-        
+
         // Set a default permission structure for debugging
         const fallbackPermission = {
           allowed: false,
@@ -368,7 +376,7 @@ const GhostPassScanner: React.FC = () => {
       }
     } catch (error) {
       console.error('Entry permission check failed:', error);
-      
+
       // Set a fallback permission for network errors
       const fallbackPermission = {
         allowed: false,
@@ -387,25 +395,33 @@ const GhostPassScanner: React.FC = () => {
   const processScan = async (qrData: string) => {
     // Stop camera immediately to prevent multiple scans
     await stopCamera();
-    
+
     setScanState('processing');
     setErrorMessage('');
 
     try {
       // Parse QR data format: "ghostsession:{wallet_binding_id}:{gateway_id}:{venue_id}:{event_id}:{verification_tier}"
       let passId = qrData;
-      let gatewayId = 'scanner_default';
+      let currentGatewayId = gatewayId;
       let qrVenueId = '';
       let qrEventId = '';
       let qrVerificationTier = 1;
-      
-      if (qrData.includes(':')) {
+      let isTicket = false;
+      let ticketCode = '';
+      let isEventQr = false;
+
+      if (qrData.startsWith('event:')) {
+        isEventQr = true;
+      } else if (qrData.startsWith('ticket:')) {
+        isTicket = true;
+        ticketCode = qrData.split(':')[1];
+      } else if (qrData.includes(':')) {
         const parts = qrData.split(':');
-        
+
         if (parts[0] === 'ghostsession' && parts.length >= 2) {
           // New format with gateway, venue, event, and verification tier
           passId = parts[1]; // wallet_binding_id
-          gatewayId = parts[2] || 'scanner_default'; // gateway_id (asset_code)
+          currentGatewayId = parts[2] || gatewayId; // gateway_id (asset_code)
           qrVenueId = parts[3] || ''; // venue_id (optional)
           qrEventId = parts[4] || ''; // event_id (optional)
           qrVerificationTier = parts[5] ? parseInt(parts[5]) : 1; // verification_tier
@@ -415,9 +431,19 @@ const GhostPassScanner: React.FC = () => {
         }
       }
 
-      // Validate that we have a proper UUID format
+      if (isEventQr || qrData.includes('/purchase/') || qrData.includes('/e/')) {
+        setScanResult({
+          status: 'DENIED',
+          message: t('scanner.invalidEventQR') || 'Event QR cannot be scanned for entry. Please purchase a ticket first.',
+          receipt_id: 'unknown'
+        });
+        setScanState('error');
+        return;
+      }
+
+      // Validate that we have a proper UUID format (only for wallets, not tickets)
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(passId)) {
+      if (!isTicket && !uuidRegex.test(passId)) {
         setScanResult({
           status: 'DENIED',
           message: t('scanner.invalidQRFormat'),
@@ -426,26 +452,31 @@ const GhostPassScanner: React.FC = () => {
         setScanState('error');
         return;
       }
-      
+
       // Note: Verification tier check is now handled by the backend API
       // The API will check if the wallet has fp_id stored in the database
       // This works across devices since fp_id is stored at the wallet level
 
       // Process the actual scan with the extracted information
       const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-      const scanResponse = await fetch(`${API_BASE_URL}/scan/validate`, {
+      const endpoint = isTicket ? '/tickets/validate' : '/scan/validate';
+      const bodyPayload = isTicket
+        ? { ticket_code: ticketCode, gateway_id: currentGatewayId, venue_id: qrVenueId || venueId }
+        : {
+          pass_id: passId,
+          gateway_id: currentGatewayId,
+          venue_id: qrVenueId || null,
+          event_id: qrEventId || null,
+          verification_tier: qrVerificationTier
+        };
+
+      const scanResponse = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Device-Fingerprint': localStorage.getItem('device_fingerprint') || ''
         },
-        body: JSON.stringify({
-          pass_id: passId, // Use extracted wallet_binding_id
-          gateway_id: gatewayId, // Use gateway_id from QR code
-          venue_id: qrVenueId || null, // Use venue_id from QR code (null if empty)
-          event_id: qrEventId || null, // Use event_id from QR code
-          verification_tier: qrVerificationTier // Pass the verification tier from QR code
-        })
+        body: JSON.stringify(bodyPayload)
       });
 
       // Check if response is JSON
@@ -456,34 +487,39 @@ const GhostPassScanner: React.FC = () => {
       }
 
       const result = await scanResponse.json();
-      
-      // Check if verification is required (API will return this if wallet doesn't have fp_id)
-      if (result.status === 'DENIED' && result.verification_tier && result.footprint_verified === false) {
+
+      if (!isTicket && result.status === 'DENIED' && result.verification_tier && result.footprint_verified === false) {
         // User needs to complete Footprint verification
         setCurrentVerificationTier(result.verification_tier);
         setWalletBindingId(passId); // Store wallet_binding_id for verification
         setScanState('verification_required');
         return;
       }
-      
-      if (result.status === 'APPROVED') {
+
+      const isApproved = isTicket ? result.allowed === true : result.status === 'APPROVED';
+
+      if (isApproved) {
         // Extract event name from result if available
-        if (result.event_name) {
-          setEventName(result.event_name);
+        const approvedEventName = isTicket ? (result.ticket?.event_name || null) : (result.event_name || null);
+        if (approvedEventName) {
+          setEventName(approvedEventName);
         }
-        
+
         // Store venue_id and event_id for later use
-        setVenueId(qrVenueId);
-        setEventId(qrEventId);
-        
+        setVenueId(qrVenueId || venueId);
+        if (qrEventId) setEventId(qrEventId);
+
         // Check if this is first scan (no existing wallet session)
         const isFirstScan = !localStorage.getItem('ghost_pass_wallet_session');
-        
+
         setScanResult({
-          ...result,
+          status: 'APPROVED',
+          message: result.message || 'Entry approved',
+          receipt_id: isTicket ? ticketCode : (result.receipt_id || 'unknown'),
+          event_name: approvedEventName,
           entry_info: {
-            entry_type: isFirstScan ? 'initial' : 're_entry',
-            entry_number: 1,
+            entry_type: isTicket ? (result.ticket?.entry_count > 1 ? 're_entry' : 'initial') : (isFirstScan ? 'initial' : 're_entry'),
+            entry_number: isTicket ? result.ticket?.entry_count || 1 : 1,
             fees: {
               initial_entry_fee_cents: 0,
               venue_reentry_fee_cents: 0,
@@ -494,29 +530,37 @@ const GhostPassScanner: React.FC = () => {
         });
         setScanState('success');
 
-        // Check if this is first scan for wallet surfacing
-        if (isFirstScan) {
-          // Force wallet surfacing immediately after successful scan
-          setTimeout(() => {
-            setShowAutoSurface(true);
-          }, 1000); // Show after success animation
+        if (!isTicket) {
+          // Check if this is first scan for wallet surfacing
+          if (isFirstScan) {
+            // Force wallet surfacing immediately after successful scan
+            setTimeout(() => {
+              setShowAutoSurface(true);
+            }, 1000); // Show after success animation
+          } else {
+            // Returning user - surface staff POS to charge wallet
+            setTimeout(() => {
+              setShowPos(true);
+            }, 2000);
+          }
         } else {
-          // Returning user - navigate to wallet after successful scan
+          // It's a ticket, reset scanning after 3 seconds so staff can scan next person
           setTimeout(() => {
-            window.location.href = `${window.location.origin}/#/wallet`;
-          }, 2000);
+            resetScan();
+          }, 3000);
         }
 
       } else {
         // Handle specific error messages
-        let errorMessage = result.message || t('scanner.scanFailed');
+        let errorMessage = result.error || result.message || t('scanner.scanFailed');
         if (errorMessage.includes('Invalid gateway location')) {
           errorMessage = t('scanner.scannerNotConfigured');
         }
-        
+
         setScanResult({
-          ...result,
-          message: errorMessage
+          status: 'DENIED',
+          message: errorMessage,
+          receipt_id: isTicket ? ticketCode : (result.receipt_id || 'unknown')
         });
         setScanState('error');
       }
@@ -539,11 +583,11 @@ const GhostPassScanner: React.FC = () => {
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      
+
       // Check if the item is an image
       if (item.type.indexOf('image') !== -1) {
         event.preventDefault();
-        
+
         const file = item.getAsFile();
         if (!file) continue;
 
@@ -553,21 +597,21 @@ const GhostPassScanner: React.FC = () => {
 
           // Create a temporary scanner instance for file scanning
           const html5QrCode = new Html5Qrcode('qr-file-reader');
-          
+
           // Scan the pasted image
           const qrData = await html5QrCode.scanFile(file, true);
-          
+
           console.log('QR Code detected from pasted image:', qrData);
-          
+
           // Process the scanned data
           await processScan(qrData);
-          
+
         } catch (error) {
           console.error('Paste scan failed:', error);
           setErrorMessage(t('scanner.pasteQRFailed'));
           setScanState('error');
         }
-        
+
         break; // Only process the first image
       }
     }
@@ -576,9 +620,9 @@ const GhostPassScanner: React.FC = () => {
   // Add paste event listener
   useEffect(() => {
     const pasteHandler = (e: ClipboardEvent) => handlePaste(e);
-    
+
     window.addEventListener('paste', pasteHandler);
-    
+
     return () => {
       window.removeEventListener('paste', pasteHandler);
     };
@@ -606,19 +650,19 @@ const GhostPassScanner: React.FC = () => {
               >
                 {/* Outer glow ring */}
                 <div className="absolute inset-0 rounded-full bg-gradient-to-r from-cyan-500/20 to-blue-500/20 blur-xl group-hover:blur-2xl transition-all duration-500" />
-                
+
                 {/* Main scan button - responsive sizing */}
                 <div className="relative w-32 h-32 sm:w-40 sm:h-40 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-xl border border-cyan-500/30 rounded-full flex items-center justify-center group-hover:border-cyan-400/50 transition-all duration-300">
                   {/* Inner glow */}
                   <div className="absolute inset-3 sm:inset-4 rounded-full bg-gradient-to-br from-cyan-500/10 to-blue-500/10" />
-                  
+
                   {/* Scan icon */}
                   <motion.div
-                    animate={{ 
+                    animate={{
                       scale: [1, 1.1, 1],
                       rotate: [0, 5, -5, 0]
                     }}
-                    transition={{ 
+                    transition={{
                       duration: 3,
                       repeat: Infinity,
                       ease: "easeInOut"
@@ -627,7 +671,7 @@ const GhostPassScanner: React.FC = () => {
                   >
                     <Target className="w-12 h-12 sm:w-16 sm:h-16 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
                   </motion.div>
-                  
+
                   {/* Corner brackets */}
                   <div className="absolute inset-0 pointer-events-none">
                     <div className="absolute top-3 left-3 sm:top-4 sm:left-4 w-4 h-4 sm:w-6 sm:h-6 border-l-2 border-t-2 border-cyan-500/60 rounded-tl-lg" />
@@ -637,7 +681,7 @@ const GhostPassScanner: React.FC = () => {
                   </div>
                 </div>
               </motion.div>
-              
+
               <div className="space-y-1 sm:space-y-2">
                 <h2 className="text-xl sm:text-2xl font-bold text-white">{t('scanner.title')}</h2>
                 <p className="text-cyan-400 font-medium text-sm sm:text-base">{t('scanner.tapToScan')}</p>
@@ -659,7 +703,7 @@ const GhostPassScanner: React.FC = () => {
                   )} />
                   <h3 className="text-lg font-semibold text-white">{t('scanner.entryStatus')}</h3>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-slate-400 block">{t('scanner.entryType')}</span>
@@ -690,12 +734,12 @@ const GhostPassScanner: React.FC = () => {
             <div className="relative">
               <div className="relative bg-slate-900/50 backdrop-blur-xl border border-cyan-500/30 rounded-xl overflow-hidden">
                 {/* Scanner element - responsive height */}
-                <div 
+                <div
                   id={scannerElementId}
                   className="w-full rounded-xl overflow-hidden"
                   style={{ minHeight: '280px' }} // Reduced for mobile
                 />
-                
+
                 {/* Simple scanning overlay */}
                 <div className="absolute inset-0 pointer-events-none">
                   {/* Top status bar */}
@@ -741,7 +785,7 @@ const GhostPassScanner: React.FC = () => {
                 <span>{t('scanner.brightnessOptimized')}</span>
               </div>
             )}
-            
+
             {/* Simple instructions */}
             <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-4">
               <div className="flex items-start space-x-3">
@@ -771,7 +815,7 @@ const GhostPassScanner: React.FC = () => {
               >
                 <div className="w-full h-full border-4 border-cyan-500/20 border-t-cyan-400 rounded-full" />
               </motion.div>
-              
+
               <motion.div
                 animate={{ scale: [1, 1.2, 1] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
@@ -780,7 +824,7 @@ const GhostPassScanner: React.FC = () => {
                 <Zap className="w-8 h-8 text-cyan-400" />
               </motion.div>
             </div>
-            
+
             <div className="space-y-2">
               <h3 className="text-xl font-bold text-white">{t('scanner.processing')}</h3>
               <p className="text-cyan-400">{t('scanner.validating')}</p>
@@ -805,7 +849,7 @@ const GhostPassScanner: React.FC = () => {
             <div className="w-24 h-24 mx-auto bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center shadow-2xl shadow-emerald-500/50">
               <CheckCircle className="w-12 h-12 text-white" />
             </div>
-            
+
             <div className="space-y-2">
               <h3 className="text-2xl font-bold text-emerald-400">{t('scanner.initialEntryAllowed')}</h3>
               <p className="text-slate-300">{scanResult?.message}</p>
@@ -830,7 +874,7 @@ const GhostPassScanner: React.FC = () => {
                       <Activity className="w-4 h-4 text-emerald-400" />
                       <span>{t('scanner.feesProcessed')}</span>
                     </h4>
-                    
+
                     <div className="space-y-2">
                       {scanResult.entry_info.fees.initial_entry_fee_cents > 0 && (
                         <div className="flex justify-between text-sm">
@@ -838,21 +882,21 @@ const GhostPassScanner: React.FC = () => {
                           <span className="text-white font-medium">${(scanResult.entry_info.fees.initial_entry_fee_cents / 100).toFixed(2)}</span>
                         </div>
                       )}
-                      
+
                       {scanResult.entry_info.fees.venue_reentry_fee_cents > 0 && (
                         <div className="flex justify-between text-sm">
                           <span className="text-slate-400">{t('scanner.venueReentry')}</span>
                           <span className="text-white font-medium">${(scanResult.entry_info.fees.venue_reentry_fee_cents / 100).toFixed(2)}</span>
                         </div>
                       )}
-                      
+
                       {scanResult.entry_info.fees.valid_reentry_scan_fee_cents > 0 && (
                         <div className="flex justify-between text-sm">
                           <span className="text-slate-400">{t('scanner.platformFee')}</span>
                           <span className="text-white font-medium">${(scanResult.entry_info.fees.valid_reentry_scan_fee_cents / 100).toFixed(2)}</span>
                         </div>
                       )}
-                      
+
                       <div className="flex justify-between font-bold text-lg border-t border-slate-700 pt-2">
                         <span className="text-white">{t('scanner.totalCharged')}</span>
                         <span className="text-emerald-400">${(scanResult.entry_info.fees.total_fees_cents / 100).toFixed(2)}</span>
@@ -881,7 +925,7 @@ const GhostPassScanner: React.FC = () => {
             <div className="w-24 h-24 mx-auto bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center shadow-2xl shadow-red-500/50">
               <AlertTriangle className="w-12 h-12 text-white" />
             </div>
-            
+
             <div className="space-y-2">
               <h3 className="text-2xl font-bold text-red-400">
                 {scanResult?.status === 'DENIED' ? t('scanner.entryDenied') : t('scanner.scanFailed')}
@@ -901,7 +945,7 @@ const GhostPassScanner: React.FC = () => {
               >
                 {t('scanner.tryAgain')}
               </motion.button>
-              
+
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -937,7 +981,7 @@ const GhostPassScanner: React.FC = () => {
                 {t('scanner.verificationRequired', 'Identity Verification Required')}
               </h3>
               <p className="text-slate-400 text-sm">
-                {currentVerificationTier === 2 
+                {currentVerificationTier === 2
                   ? t('scanner.tier2Required', 'This entry point requires Tier-2 identity verification')
                   : t('scanner.tier3Required', 'This entry point requires Tier-3 identity verification')}
               </p>
@@ -992,10 +1036,10 @@ const GhostPassScanner: React.FC = () => {
     <div className="min-h-screen bg-slate-950 text-white pb-safe">
       {/* Hidden div for file QR code reading */}
       <div id="qr-file-reader" style={{ display: 'none' }}></div>
-      
+
       <div className="max-w-md mx-auto px-4">
         {/* Header */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="text-center py-6 sm:py-8"
@@ -1024,7 +1068,7 @@ const GhostPassScanner: React.FC = () => {
             <div className="w-2 h-2 sm:w-3 sm:h-3 bg-emerald-400 rounded-full animate-pulse" />
             <h3 className="text-base sm:text-lg font-semibold text-white">{t('scanner.scannerStatus')}</h3>
           </div>
-          
+
           <div className="grid grid-cols-1 gap-2 sm:gap-3 text-xs sm:text-sm">
             <div className="flex items-center justify-between">
               <span className="text-slate-400">{t('scanner.event', 'Event')}</span>
@@ -1049,7 +1093,7 @@ const GhostPassScanner: React.FC = () => {
               </div>
             )}
           </div>
-          
+
           {/* Dev Only: Reset Button - removed for production */}
         </motion.div>
 
@@ -1100,6 +1144,25 @@ const GhostPassScanner: React.FC = () => {
               setTimeout(() => {
                 setShowAutoSurface(false);
               }, 2000);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* POS UI */}
+      <AnimatePresence>
+        {showPos && (
+          <MenuBasedVendorPurchase
+            venueId={venueId}
+            eventId={eventId || undefined}
+            clientWalletId={walletBindingId}
+            onClose={() => {
+              setShowPos(false);
+              setScanState('idle');
+            }}
+            onSuccess={() => {
+              setShowPos(false);
+              setScanState('idle');
             }}
           />
         )}
