@@ -696,7 +696,7 @@ export const VenueEventManager: React.FC<VenueEventManagerProps> = ({ venueId })
                       <span className="text-purple-400">{t('events.ticket')} ${(event.ticket_price_cents / 100).toFixed(2)}</span>
                     )}
                   </div>
-                  <div className="mt-4 p-4 bg-slate-800 rounded-xl flex items-start space-x-4">
+                  <div className="mt-4 p-4 bg-slate-800 rounded-xl flex flex-col sm:flex-row items-center sm:items-start space-y-4 sm:space-y-0 sm:space-x-4">
                     <div className="bg-white p-2 rounded-lg">
                       <QRCode
                         id={`qr-event-${event.event_id}`}
@@ -708,10 +708,10 @@ export const VenueEventManager: React.FC<VenueEventManagerProps> = ({ venueId })
                       />
                     </div>
 
-                    <div>
+                    <div className="text-center sm:text-left">
                       <h4 className="text-sm font-semibold text-white mb-1">Event QR</h4>
                       <p className="text-xs text-slate-400 mb-2">Guests can scan this QR with their camera app to instantly open the purchase page for this event.</p>
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center justify-center sm:justify-start space-x-2">
                         <code className="text-xs text-cyan-400 bg-slate-900 px-2 py-1 rounded">event:{event.event_id}</code>
                         <button
                           onClick={() => downloadQRCode(event.event_id, event.event_name)}

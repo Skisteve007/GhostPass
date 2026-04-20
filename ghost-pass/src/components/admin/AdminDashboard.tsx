@@ -12,9 +12,9 @@ import { TransactionLedger } from './TransactionLedger';
 export const AdminDashboard: React.FC = () => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'events' | 'profiles' | 'menu' | 'stations' | 'ledger'>('events');
-  // In a real scenario, this would be selected from a dropdown or come from user context
-  const [selectedVenue, setSelectedVenue] = useState('venue_001');
-  const [selectedEvent, setSelectedEvent] = useState('');
+  // In a real scenario, these would be selected from a dropdown or come from user context
+  const selectedVenue = 'venue_001';
+  const selectedEvent = '';
 
   const tabs = [
     { id: 'events' as const, label: t('events.title'), icon: Building2 },
